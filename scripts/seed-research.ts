@@ -21,8 +21,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { config } from 'dotenv';
 
-// Load environment variables
-config();
+// Load environment variables from .env.local
+config({ path: path.resolve(__dirname, '../.env.local') });
 
 import { searchAndFetchArticles, type PubMedArticle } from './lib/pubmed-client';
 import { analyzeStudies, filterByQuality, type AnalyzedStudy } from './lib/claude-analyzer';

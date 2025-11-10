@@ -99,17 +99,36 @@ export async function fetchArticleDetails(pmids: string[]): Promise<PubMedArticl
   console.log(`📥 Fetching details for ${pmids.length} articles...`);
 
   try {
-    const response = await fetch(fetchUrl.toString());
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+    const response = await fetch(fetchUrl.toString(), {
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      throw new Error(`PubMed fetch failed: ${response.status} ${response.statusText}`);
+    }
+
+    console.log(`   Reading response...`);
     const xmlText = await response.text();
+    console.log(`   Response size: ${xmlText.length} bytes`);
 
     // Parse XML to extract article data
+    console.log(`   Parsing XML...`);
     const articles = parseArticlesFromXML(xmlText);
     console.log(`   Successfully parsed ${articles.length} articles`);
 
     return articles;
-  } catch (error) {
-    console.error('Error fetching article details:', error);
-    throw error;
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      console.error('   ⚠️  Request timed out after 30 seconds');
+      return []; // Return empty array on timeout instead of crashing
+    }
+    console.error('Error fetching article details:', error.message || error);
+    return []; // Return empty array instead of throwing
   }
 }
 

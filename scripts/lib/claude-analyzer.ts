@@ -6,9 +6,16 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { PubMedArticle } from './pubmed-client';
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY || '',
-});
+let anthropic: Anthropic | null = null;
+
+function getAnthropicClient(): Anthropic {
+  if (!anthropic) {
+    anthropic = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY || '',
+    });
+  }
+  return anthropic;
+}
 
 export interface AnalyzedStudy {
   // Original PubMed data
@@ -73,7 +80,8 @@ Guidelines:
 Return ONLY the JSON object, no other text.`;
 
   try {
-    const message = await anthropic.messages.create({
+    const client = getAnthropicClient();
+    const message = await client.messages.create({
       model: 'claude-3-5-haiku-20241022', // Using Haiku for speed and cost efficiency
       max_tokens: 1024,
       messages: [{
