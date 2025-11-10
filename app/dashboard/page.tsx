@@ -52,7 +52,7 @@ export default function DashboardPage() {
           </p>
 
           {/* Quick Actions */}
-          <div className="grid md:grid-cols-3 gap-6 mb-8">
+          <div className="grid md:grid-cols-4 gap-6 mb-8">
             <Link
               href="/upload"
               className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow"
@@ -61,6 +61,17 @@ export default function DashboardPage() {
               <h3 className="text-xl font-semibold mb-2">Upload Labs</h3>
               <p className="text-gray-600">
                 Upload your blood work to get personalized protocols
+              </p>
+            </Link>
+
+            <Link
+              href="/biomarkers"
+              className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow"
+            >
+              <div className="text-4xl mb-3">🧬</div>
+              <h3 className="text-xl font-semibold mb-2">Biomarkers</h3>
+              <p className="text-gray-600">
+                View and manage tracked biomarkers
               </p>
             </Link>
 

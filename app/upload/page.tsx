@@ -110,8 +110,9 @@ function PDFUploadTab() {
 
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const droppedFile = e.dataTransfer.files[0];
-      if (droppedFile.type !== 'application/pdf') {
-        setError('Please upload a PDF file');
+      const validTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
+      if (!validTypes.includes(droppedFile.type)) {
+        setError('Please upload a PDF or image file (PNG, JPG)');
         return;
       }
       setFile(droppedFile);
@@ -122,8 +123,9 @@ function PDFUploadTab() {
     setError('');
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
-      if (selectedFile.type !== 'application/pdf') {
-        setError('Please upload a PDF file');
+      const validTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
+      if (!validTypes.includes(selectedFile.type)) {
+        setError('Please upload a PDF or image file (PNG, JPG)');
         return;
       }
       setFile(selectedFile);
@@ -177,7 +179,7 @@ function PDFUploadTab() {
         <input
           type="file"
           id="file-upload"
-          accept="application/pdf"
+          accept="application/pdf,image/png,image/jpeg,image/jpg"
           onChange={handleFileChange}
           className="hidden"
         />
@@ -221,7 +223,7 @@ function PDFUploadTab() {
                 </label>
               </p>
               <p className="text-sm text-gray-500">
-                Supported format: PDF (max 10MB)
+                Supported formats: PDF, PNG, JPG (max 10MB)
               </p>
             </div>
           </div>

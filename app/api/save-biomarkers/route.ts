@@ -91,18 +91,20 @@ export async function POST(request: NextRequest) {
 
     // Process each biomarker result
     const results = [];
+
     for (const [biomarkerId, value] of Object.entries(biomarkers)) {
       if (!value || value === '') continue;
 
       const numValue = parseFloat(value as string);
       if (isNaN(numValue)) continue;
 
-      const biomarker = biomarkerDefs.find((b) => b.id === biomarkerId);
+      // Use loose equality to handle string vs number ID comparison
+      const biomarker = biomarkerDefs.find((b) => b.id == biomarkerId);
       if (!biomarker) continue;
 
-      // Determine the condition based on value ranges
+      // Determine the condition based on value ranges (use loose equality)
       const biomarkerConditions = conditions.filter(
-        (c) => c.biomarker_id === biomarkerId
+        (c) => c.biomarker_id == biomarkerId
       );
 
       let matchedCondition = null;

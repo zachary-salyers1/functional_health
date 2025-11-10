@@ -94,7 +94,7 @@ export default function ResultsPage() {
 
   // Group results by category
   const categorized = results.reduce((acc: any, result) => {
-    const category = result.biomarker.category;
+    const category = result.biomarker.category.toLowerCase();
     if (!acc[category]) {
       acc[category] = [];
     }
@@ -102,13 +102,16 @@ export default function ResultsPage() {
     return acc;
   }, {});
 
-  const categoryOrder = ['metabolic', 'lipids', 'thyroid', 'vitamins', 'minerals', 'inflammation'];
+  const categoryOrder = ['metabolic', 'cardiovascular', 'lipids', 'thyroid', 'vitamins & minerals', 'vitamins', 'minerals', 'inflammatory', 'inflammation'];
   const categoryLabels: Record<string, string> = {
     metabolic: '🔥 Metabolic Health',
-    lipids: '❤️ Lipid Panel',
+    cardiovascular: '❤️ Cardiovascular',
+    lipids: '💧 Lipid Panel',
     thyroid: '🦋 Thyroid Function',
+    'vitamins & minerals': '💊 Vitamins & Minerals',
     vitamins: '💊 Vitamins',
     minerals: '⚡ Minerals',
+    inflammatory: '🔬 Inflammation',
     inflammation: '🔬 Inflammation',
   };
 

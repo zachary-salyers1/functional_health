@@ -8,10 +8,6 @@ export async function POST(request: NextRequest) {
     // Get the session
     const cookieStore = await cookies();
 
-    // Debug: log all cookies
-    const allCookies = cookieStore.getAll();
-    console.log('Cookies received:', allCookies.map(c => c.name));
-
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -38,14 +34,8 @@ export async function POST(request: NextRequest) {
       error: authError,
     } = await supabase.auth.getUser();
 
-    console.log('Auth check:', { user: user?.id, error: authError?.message });
-
     if (authError || !user) {
-      console.error('Auth failed:', authError);
-      return NextResponse.json({
-        error: 'Unauthorized',
-        details: authError?.message
-      }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Parse the form data
@@ -57,9 +47,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate file type
-    if (file.type !== 'application/pdf') {
+    const validTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
+    if (!validTypes.includes(file.type)) {
       return NextResponse.json(
-        { error: 'Only PDF files are allowed' },
+        { error: 'Only PDF and image files are allowed' },
         { status: 400 }
       );
     }
@@ -78,11 +69,13 @@ export async function POST(request: NextRequest) {
     const fileName = `${user.id}/${timestamp}-${file.name}`;
 
     // Upload to Supabase Storage
-    const fileBuffer = await file.arrayBuffer();
+    const arrayBuffer = await file.arrayBuffer();
+    const fileBuffer = Buffer.from(arrayBuffer);
+
     const { error: uploadError } = await supabase.storage
       .from('lab-uploads')
       .upload(fileName, fileBuffer, {
-        contentType: 'application/pdf',
+        contentType: file.type,
         upsert: false,
       });
 
@@ -119,9 +112,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Process PDF with OCR
-    console.log('Processing PDF with OCR...');
-    const pdfResult = await processLabPDF(fileBuffer);
+    // Process file with OCR
+    console.log(`Processing ${file.type} with OCR...`);
+    const pdfResult = await processLabPDF(fileBuffer, file.type);
+
+    // Log extracted text for debugging
+    console.log('=== EXTRACTED TEXT (first 1000 chars) ===');
+    console.log(pdfResult.rawText.substring(0, 1000));
+    console.log('=== END TEXT ===');
 
     if (pdfResult.success && pdfResult.biomarkers.length > 0) {
       console.log(`Extracted ${pdfResult.biomarkers.length} biomarkers from PDF`);
