@@ -43,3 +43,6 @@ functional-health-*.json
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# scripts output
+/scripts/output/
