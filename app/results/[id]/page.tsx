@@ -37,6 +37,7 @@ export default function ResultsPage() {
   const [error, setError] = useState('');
   const [results, setResults] = useState<BiomarkerResult[]>([]);
   const [upload, setUpload] = useState<any>(null);
+  const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -61,6 +62,30 @@ export default function ResultsPage() {
       setError(err.message || 'Failed to load results');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function generateProtocol() {
+    setGenerating(true);
+    try {
+      const response = await fetch('/api/protocols/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lab_upload_id: uploadId })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to generate protocol');
+      }
+
+      const data = await response.json();
+      // Redirect to protocol page
+      router.push(`/protocol/${data.protocol_id}`);
+    } catch (err: any) {
+      alert(err.message || 'Failed to generate protocol');
+    } finally {
+      setGenerating(false);
     }
   }
 
@@ -182,6 +207,30 @@ export default function ResultsPage() {
               </div>
             </div>
           </div>
+
+          {/* Generate Protocol Button */}
+          {(suboptimalCount > 0 || concerningCount > 0 || clinicalCount > 0) && (
+            <div className="bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 rounded-lg p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">
+                    🎯 Ready to Optimize Your Health?
+                  </h3>
+                  <p className="text-gray-700">
+                    Generate a personalized protocol with specific interventions, supplements, and lifestyle changes
+                    based on your lab results. Backed by peer-reviewed research.
+                  </p>
+                </div>
+                <button
+                  onClick={generateProtocol}
+                  disabled={generating}
+                  className="ml-6 px-8 py-4 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                >
+                  {generating ? 'Generating...' : 'Generate Protocol →'}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Results by Category */}
           {categoryOrder.map((category) => {
