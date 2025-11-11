@@ -42,3 +42,7 @@ next-env.d.ts
 
 # scripts output
 /scripts/output/
+
+# Google Cloud credentials
+*-542534ddb669.json
+functional-health-*.json
