@@ -75,19 +75,25 @@ export default function DashboardPage() {
               </p>
             </Link>
 
-            <div className="bg-white rounded-lg shadow-sm p-6 opacity-50 cursor-not-allowed">
+            <Link
+              href="/protocols"
+              className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow"
+            >
               <div className="text-4xl mb-3">📊</div>
               <h3 className="text-xl font-semibold mb-2">View Protocols</h3>
               <p className="text-gray-600">
                 Access your personalized health optimization plans
               </p>
-            </div>
+            </Link>
 
-            <div className="bg-white rounded-lg shadow-sm p-6 opacity-50 cursor-not-allowed">
+            <Link
+              href="/trends"
+              className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow"
+            >
               <div className="text-4xl mb-3">📈</div>
-              <h3 className="text-xl font-semibold mb-2">Track Progress</h3>
+              <h3 className="text-xl font-semibold mb-2">Biomarker Trends</h3>
               <p className="text-gray-600">Monitor your biomarker improvements over time</p>
-            </div>
+            </Link>
           </div>
 
           {/* Empty State */}

@@ -6,9 +6,17 @@ import { useRouter } from 'next/navigation';
 interface Biomarker {
   id: string;
   name: string;
-  unit: string;
+  standard_unit: string;
   category: string;
   description: string | null;
+  short_description: string | null;
+  optimal_range_min: number;
+  optimal_range_max: number;
+  clinical_low: number;
+  clinical_high: number;
+  latest_value?: number | null;
+  latest_date?: string | null;
+  latest_status?: string | null;
 }
 
 export default function BiomarkersPage() {
@@ -24,6 +32,8 @@ export default function BiomarkersPage() {
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [editingRanges, setEditingRanges] = useState<string | null>(null);
+  const [rangeValues, setRangeValues] = useState({ min: 0, max: 0 });
 
   useEffect(() => {
     fetchBiomarkers();
@@ -66,6 +76,46 @@ export default function BiomarkersPage() {
     } catch (err: any) {
       setError(err.message);
     }
+  }
+
+  function startEditingRange(biomarker: Biomarker) {
+    setEditingRanges(biomarker.id);
+    setRangeValues({
+      min: biomarker.optimal_range_min,
+      max: biomarker.optimal_range_max,
+    });
+  }
+
+  async function saveRanges(biomarkerId: string) {
+    setError('');
+    setSuccess('');
+
+    try {
+      const response = await fetch(`/api/biomarkers/${biomarkerId}/ranges`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          optimal_range_min: rangeValues.min,
+          optimal_range_max: rangeValues.max,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to update ranges');
+      }
+
+      setSuccess('Optimal ranges updated successfully!');
+      setEditingRanges(null);
+      fetchBiomarkers();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  }
+
+  function cancelEditing() {
+    setEditingRanges(null);
+    setRangeValues({ min: 0, max: 0 });
   }
 
   const categories = [
@@ -214,15 +264,112 @@ export default function BiomarkersPage() {
                 {items.map((biomarker) => (
                   <div
                     key={biomarker.id}
-                    className="flex justify-between items-center p-3 bg-gray-50 rounded-lg"
+                    className="p-4 bg-gray-50 rounded-lg"
                   >
-                    <div>
-                      <h3 className="font-medium text-gray-900">{biomarker.name}</h3>
-                      {biomarker.description && (
-                        <p className="text-sm text-gray-600 mt-1">{biomarker.description}</p>
-                      )}
+                    <div className="flex justify-between items-start mb-3">
+                      <div className="flex-1">
+                        <h3 className="font-medium text-gray-900">{biomarker.name}</h3>
+                        {biomarker.description && (
+                          <p className="text-sm text-gray-600 mt-1">{biomarker.description}</p>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm text-gray-600 font-mono mb-1">{biomarker.standard_unit}</div>
+                        {biomarker.latest_value !== null && biomarker.latest_value !== undefined ? (
+                          <div className="text-lg font-semibold">
+                            <span
+                              className={
+                                biomarker.latest_status === 'optimal'
+                                  ? 'text-green-600'
+                                  : biomarker.latest_status === 'suboptimal'
+                                  ? 'text-yellow-600'
+                                  : 'text-red-600'
+                              }
+                            >
+                              {biomarker.latest_value}
+                            </span>
+                            {biomarker.latest_date && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                {new Date(biomarker.latest_date).toLocaleDateString()}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-sm text-gray-400 italic">N/A</div>
+                        )}
+                      </div>
                     </div>
-                    <div className="text-sm text-gray-600 font-mono">{biomarker.unit}</div>
+
+                    {editingRanges === biomarker.id ? (
+                      <div className="border-t border-gray-200 pt-3">
+                        <div className="grid grid-cols-2 gap-4 mb-3">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Optimal Min
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={rangeValues.min}
+                              onChange={(e) =>
+                                setRangeValues({ ...rangeValues, min: parseFloat(e.target.value) })
+                              }
+                              className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Optimal Max
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={rangeValues.max}
+                              onChange={(e) =>
+                                setRangeValues({ ...rangeValues, max: parseFloat(e.target.value) })
+                              }
+                              className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => saveRanges(biomarker.id)}
+                            className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={cancelEditing}
+                            className="px-3 py-1 bg-gray-200 text-gray-700 text-sm rounded hover:bg-gray-300"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="border-t border-gray-200 pt-3">
+                        <div className="flex items-center justify-between">
+                          <div className="text-sm">
+                            <span className="text-gray-600">Optimal Range: </span>
+                            <span className="font-semibold text-green-700">
+                              {biomarker.optimal_range_min} - {biomarker.optimal_range_max}{' '}
+                              {biomarker.standard_unit}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => startEditingRange(biomarker)}
+                            className="px-3 py-1 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded"
+                          >
+                            Edit
+                          </button>
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          Clinical Range: {biomarker.clinical_low} - {biomarker.clinical_high}{' '}
+                          {biomarker.standard_unit}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
