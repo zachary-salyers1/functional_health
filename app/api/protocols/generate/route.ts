@@ -1,6 +1,7 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
+import { sendProtocolEmail } from '@/lib/email/send-protocol-email';
 
 export const dynamic = 'force-dynamic';
 
@@ -240,7 +241,75 @@ export async function POST(request: Request) {
       );
     }
 
-    // 9. Return success with protocol details
+    // 9. Fetch full recommendations data for email
+    const { data: fullRecommendations } = await supabase
+      .from('protocol_recommendations')
+      .select(`
+        *,
+        interventions (
+          id,
+          intervention_type,
+          name,
+          short_description,
+          detailed_description,
+          how_to_implement,
+          dosage_info,
+          frequency,
+          timing,
+          brand_recommendations,
+          expected_outcome,
+          typical_duration_days,
+          expected_improvement_percentage,
+          difficulty_level,
+          estimated_cost,
+          contraindications,
+          warnings
+        )
+      `)
+      .eq('protocol_id', protocol.id)
+      .order('priority_order', { ascending: true });
+
+    // 10. Get user data for email
+    const { data: userData } = await supabase
+      .from('users')
+      .select('first_name, last_name, email')
+      .eq('id', user.id)
+      .single();
+
+    // 11. Calculate recommendations by type for email
+    const recommendationsByType = {
+      dietary: fullRecommendations?.filter(r => r.interventions?.intervention_type === 'dietary').length || 0,
+      supplement: fullRecommendations?.filter(r => r.interventions?.intervention_type === 'supplement').length || 0,
+      lifestyle: fullRecommendations?.filter(r => r.interventions?.intervention_type === 'lifestyle').length || 0,
+      exercise: fullRecommendations?.filter(r => r.interventions?.intervention_type === 'exercise').length || 0,
+      sleep: fullRecommendations?.filter(r => r.interventions?.intervention_type === 'sleep').length || 0,
+    };
+
+    // 12. Send protocol email (non-blocking - don't wait for it)
+    if (userData?.email && fullRecommendations) {
+      const userName = userData.first_name && userData.last_name
+        ? `${userData.first_name} ${userData.last_name}`.trim()
+        : userData.first_name || userData.email;
+
+      // Fire and forget - don't block the response
+      sendProtocolEmail({
+        to: userData.email,
+        userName,
+        protocol: {
+          ...protocol,
+          recommendations_by_type: recommendationsByType,
+        },
+        recommendations: fullRecommendations,
+        totalInterventions: finalRules.length,
+      }).catch(emailError => {
+        // Log error but don't fail the request
+        console.error('Failed to send protocol email (non-blocking):', emailError);
+      });
+
+      console.log('✉️ Protocol email queued for:', userData.email);
+    }
+
+    // 13. Return success with protocol details
     return NextResponse.json({
       success: true,
       protocol_id: protocol.id,
@@ -251,7 +320,8 @@ export async function POST(request: Request) {
         secondary: finalRules.filter(r => r.recommendation_strength === 'secondary').length,
         optional: finalRules.filter(r => r.recommendation_strength === 'optional').length
       },
-      retest_date: protocol.retest_recommended_date
+      retest_date: protocol.retest_recommended_date,
+      email_sent: !!userData?.email
     });
 
   } catch (error) {
