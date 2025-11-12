@@ -60,6 +60,7 @@ export async function GET(
         biomarker_id,
         value,
         unit,
+        condition_id,
         biomarker:biomarkers (
           name,
           category,
@@ -71,7 +72,7 @@ export async function GET(
           short_description,
           why_it_matters
         ),
-        condition:biomarker_conditions (
+        condition:biomarker_conditions!condition_id (
           condition_name,
           severity,
           clinical_significance
@@ -87,6 +88,12 @@ export async function GET(
         { status: 500 }
       );
     }
+
+    // Debug logging
+    console.log('Results fetched:', results?.length || 0);
+    console.log('Sample result with condition:', results?.[0]);
+    const withConditions = results?.filter(r => r.condition) || [];
+    console.log(`Results with conditions: ${withConditions.length}/${results?.length || 0}`);
 
     return NextResponse.json({
       upload,

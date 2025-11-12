@@ -1,4 +1,4 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { sendProtocolEmail } from '@/lib/email/send-protocol-email';
@@ -14,7 +14,23 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll();
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          },
+        },
+      }
+    );
     const { lab_upload_id } = await request.json();
 
     if (!lab_upload_id) {
@@ -224,9 +240,7 @@ export async function POST(request: Request) {
       priority_order: index + 1,
       recommendation_strength: rule.recommendation_strength,
       custom_rationale: rule.rationale,
-      expected_outcome: rule.expected_outcome,
-      estimated_timeframe_days: rule.timeframe_days,
-      status: 'not_started'
+      status: 'pending'
     }));
 
     const { error: recommendationsError } = await supabase
