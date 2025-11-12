@@ -61,6 +61,7 @@ export default function ProtocolPage() {
   const [protocol, setProtocol] = useState<Protocol | null>(null);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -98,6 +99,35 @@ export default function ProtocolPage() {
       newExpanded.add(id);
     }
     setExpandedCards(newExpanded);
+  };
+
+  const handleDownloadPdf = async () => {
+    setDownloadingPdf(true);
+    try {
+      const response = await fetch(`/api/protocols/${protocolId}/pdf`);
+      if (!response.ok) {
+        throw new Error('Failed to generate PDF');
+      }
+
+      // Get the PDF blob
+      const blob = await response.blob();
+
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `protocol-${protocol?.protocol_name.toLowerCase().replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+
+      // Cleanup
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err: any) {
+      alert('Failed to download PDF: ' + err.message);
+    } finally {
+      setDownloadingPdf(false);
+    }
   };
 
   const getStrengthBadge = (strength: string) => {
@@ -160,10 +190,36 @@ export default function ProtocolPage() {
         <div className="max-w-5xl mx-auto">
           {/* Protocol Header */}
           <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              {protocol.protocol_name}
-            </h1>
-            <p className="text-lg text-gray-600 mb-4">{protocol.priority_focus}</p>
+            <div className="flex justify-between items-start mb-4">
+              <div className="flex-1">
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                  {protocol.protocol_name}
+                </h1>
+                <p className="text-lg text-gray-600">{protocol.priority_focus}</p>
+              </div>
+              <button
+                onClick={handleDownloadPdf}
+                disabled={downloadingPdf}
+                className="ml-4 flex items-center gap-2 px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                {downloadingPdf ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Download PDF
+                  </>
+                )}
+              </button>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
               <div className="bg-blue-50 rounded-lg p-4">
