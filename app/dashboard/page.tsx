@@ -31,6 +31,12 @@ export default function DashboardPage() {
           </Link>
           <nav className="flex items-center gap-4">
             <span className="text-gray-600">{user?.email}</span>
+            <Link
+              href="/settings"
+              className="px-4 py-2 text-gray-700 hover:text-gray-900"
+            >
+              Settings
+            </Link>
             <button
               onClick={handleSignOut}
               className="px-4 py-2 text-gray-700 hover:text-gray-900"

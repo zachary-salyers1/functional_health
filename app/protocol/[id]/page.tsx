@@ -23,6 +23,23 @@ type Intervention = {
   warnings: string;
 };
 
+type ResearchStudy = {
+  id: number;
+  title: string;
+  authors: string;
+  journal: string;
+  publication_year: number;
+  pubmed_id: string;
+  doi: string;
+  url: string;
+  study_type: string;
+  quality_score: number;
+  sample_size: number;
+  duration_weeks: number;
+  key_findings: string;
+  statistical_significance: string;
+};
+
 type Recommendation = {
   id: string;
   priority_order: number;
@@ -32,6 +49,7 @@ type Recommendation = {
   estimated_timeframe_days: number;
   status: string;
   interventions: Intervention;
+  research_studies: ResearchStudy[];
 };
 
 type Protocol = {
@@ -62,6 +80,7 @@ export default function ProtocolPage() {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [showShoppingList, setShowShoppingList] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -99,6 +118,31 @@ export default function ProtocolPage() {
       newExpanded.add(id);
     }
     setExpandedCards(newExpanded);
+  };
+
+  const updateInterventionStatus = async (recommendationId: string, newStatus: string) => {
+    try {
+      const response = await fetch(`/api/recommendations/${recommendationId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update status');
+      }
+
+      // Update local state
+      setRecommendations(prev =>
+        prev.map(rec =>
+          rec.id === recommendationId
+            ? { ...rec, status: newStatus }
+            : rec
+        )
+      );
+    } catch (err: any) {
+      alert('Failed to update status: ' + err.message);
+    }
   };
 
   const handleDownloadPdf = async () => {
@@ -150,6 +194,55 @@ export default function ProtocolPage() {
     return badges[type as keyof typeof badges] || 'bg-gray-100 text-gray-800';
   };
 
+  const generateShoppingList = () => {
+    const items: { category: string; items: string[] }[] = [];
+
+    // Group by intervention type
+    const supplements = recommendations
+      .filter(r => r.interventions.intervention_type === 'supplement' && r.status !== 'skipped')
+      .map(r => ({
+        name: r.interventions.name,
+        dosage: r.interventions.dosage_info,
+        brands: r.interventions.brand_recommendations
+      }));
+
+    const dietary = recommendations
+      .filter(r => r.interventions.intervention_type === 'dietary' && r.status !== 'skipped')
+      .map(r => r.interventions.name);
+
+    const lifestyle = recommendations
+      .filter(r => r.interventions.intervention_type === 'lifestyle' && r.status !== 'skipped')
+      .map(r => r.interventions.name);
+
+    if (supplements.length > 0) {
+      items.push({
+        category: 'Supplements',
+        items: supplements.map(s => {
+          let item = s.name;
+          if (s.dosage) item += ` (${s.dosage})`;
+          if (s.brands) item += ` - Brands: ${s.brands}`;
+          return item;
+        })
+      });
+    }
+
+    if (dietary.length > 0) {
+      items.push({
+        category: 'Dietary Changes',
+        items: dietary
+      });
+    }
+
+    if (lifestyle.length > 0) {
+      items.push({
+        category: 'Lifestyle/Equipment',
+        items: lifestyle
+      });
+    }
+
+    return items;
+  };
+
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -197,28 +290,39 @@ export default function ProtocolPage() {
                 </h1>
                 <p className="text-lg text-gray-600">{protocol.priority_focus}</p>
               </div>
-              <button
-                onClick={handleDownloadPdf}
-                disabled={downloadingPdf}
-                className="ml-4 flex items-center gap-2 px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-              >
-                {downloadingPdf ? (
-                  <>
-                    <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    Download PDF
-                  </>
-                )}
-              </button>
+              <div className="ml-4 flex gap-2">
+                <button
+                  onClick={() => setShowShoppingList(true)}
+                  className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  Shopping List
+                </button>
+                <button
+                  onClick={handleDownloadPdf}
+                  disabled={downloadingPdf}
+                  className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                >
+                  {downloadingPdf ? (
+                    <>
+                      <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Download PDF
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
@@ -316,6 +420,53 @@ export default function ProtocolPage() {
                 {expandedCards.has(rec.id) && (
                   <div className="px-6 pb-6 border-t pt-4">
                     <div className="space-y-4">
+                      {/* Status Tracking */}
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <h4 className="font-semibold text-gray-900 mb-3">Track Your Progress:</h4>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => updateInterventionStatus(rec.id, 'pending')}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                              rec.status === 'pending'
+                                ? 'bg-gray-600 text-white'
+                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                            }`}
+                          >
+                            Not Started
+                          </button>
+                          <button
+                            onClick={() => updateInterventionStatus(rec.id, 'started')}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                              rec.status === 'started'
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                            }`}
+                          >
+                            Started
+                          </button>
+                          <button
+                            onClick={() => updateInterventionStatus(rec.id, 'completed')}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                              rec.status === 'completed'
+                                ? 'bg-green-600 text-white'
+                                : 'bg-green-100 text-green-700 hover:bg-green-200'
+                            }`}
+                          >
+                            Completed
+                          </button>
+                          <button
+                            onClick={() => updateInterventionStatus(rec.id, 'skipped')}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                              rec.status === 'skipped'
+                                ? 'bg-red-600 text-white'
+                                : 'bg-red-100 text-red-700 hover:bg-red-200'
+                            }`}
+                          >
+                            Skipped
+                          </button>
+                        </div>
+                      </div>
+
                       {/* Rationale */}
                       <div>
                         <h4 className="font-semibold text-gray-900 mb-1">Why This Matters:</h4>
@@ -380,6 +531,78 @@ export default function ProtocolPage() {
                         <p className="text-blue-800">{rec.expected_outcome}</p>
                       </div>
 
+                      {/* Research Citations */}
+                      {rec.research_studies && rec.research_studies.length > 0 && (
+                        <div className="bg-purple-50 rounded-lg p-4">
+                          <h4 className="font-semibold text-purple-900 mb-3">
+                            📚 Research Evidence ({rec.research_studies.length} {rec.research_studies.length === 1 ? 'study' : 'studies'})
+                          </h4>
+                          <div className="space-y-3">
+                            {rec.research_studies.map((study, idx) => (
+                              <div key={study.id} className="bg-white rounded p-3 border border-purple-200">
+                                <div className="flex items-start justify-between gap-2 mb-2">
+                                  <h5 className="font-medium text-purple-900 text-sm flex-1">
+                                    {idx + 1}. {study.title}
+                                  </h5>
+                                  {study.quality_score && (
+                                    <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded font-medium whitespace-nowrap">
+                                      Quality: {study.quality_score}/10
+                                    </span>
+                                  )}
+                                </div>
+                                {study.authors && (
+                                  <p className="text-xs text-gray-600 mb-1">{study.authors}</p>
+                                )}
+                                <p className="text-xs text-gray-600 mb-2">
+                                  {study.journal && <span>{study.journal}, </span>}
+                                  {study.publication_year}
+                                  {study.sample_size && <span> • n={study.sample_size}</span>}
+                                  {study.duration_weeks && <span> • {study.duration_weeks} weeks</span>}
+                                  {study.study_type && <span> • {study.study_type}</span>}
+                                </p>
+                                {study.key_findings && (
+                                  <p className="text-xs text-gray-700 mb-2">
+                                    <strong>Key Finding:</strong> {study.key_findings}
+                                  </p>
+                                )}
+                                <div className="flex gap-2">
+                                  {study.pubmed_id && (
+                                    <a
+                                      href={`https://pubmed.ncbi.nlm.nih.gov/${study.pubmed_id}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-xs text-purple-600 hover:text-purple-800 underline"
+                                    >
+                                      PubMed
+                                    </a>
+                                  )}
+                                  {study.doi && (
+                                    <a
+                                      href={`https://doi.org/${study.doi}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-xs text-purple-600 hover:text-purple-800 underline"
+                                    >
+                                      DOI
+                                    </a>
+                                  )}
+                                  {study.url && (
+                                    <a
+                                      href={study.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-xs text-purple-600 hover:text-purple-800 underline"
+                                    >
+                                      Full Text
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       {/* Warnings */}
                       {(rec.interventions.contraindications || rec.interventions.warnings) && (
                         <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
@@ -415,6 +638,72 @@ export default function ProtocolPage() {
           </div>
         </div>
       </main>
+
+      {/* Shopping List Modal */}
+      {showShoppingList && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-gray-900">Shopping List</h2>
+              <button
+                onClick={() => setShowShoppingList(false)}
+                className="text-gray-400 hover:text-gray-600 text-2xl"
+              >
+                ×
+              </button>
+            </div>
+            <div className="p-6">
+              {generateShoppingList().map((category) => (
+                <div key={category.category} className="mb-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                    {category.category === 'Supplements' && '💊'}
+                    {category.category === 'Dietary Changes' && '🥗'}
+                    {category.category === 'Lifestyle/Equipment' && '🛠️'}
+                    {category.category}
+                  </h3>
+                  <ul className="space-y-2">
+                    {category.items.map((item, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <input
+                          type="checkbox"
+                          className="mt-1 h-4 w-4 text-blue-600 rounded"
+                        />
+                        <span className="text-gray-700">{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+              {generateShoppingList().length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  <p>No items to purchase yet.</p>
+                  <p className="text-sm mt-2">Start marking interventions as "Started" to build your shopping list.</p>
+                </div>
+              )}
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  onClick={() => {
+                    const list = generateShoppingList()
+                      .map(cat => `${cat.category}:\n${cat.items.map((item, i) => `  ${i + 1}. ${item}`).join('\n')}`)
+                      .join('\n\n');
+                    navigator.clipboard.writeText(list);
+                    alert('Shopping list copied to clipboard!');
+                  }}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Copy to Clipboard
+                </button>
+                <button
+                  onClick={() => setShowShoppingList(false)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

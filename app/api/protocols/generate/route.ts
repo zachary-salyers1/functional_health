@@ -6,6 +6,41 @@ import { sendProtocolEmail } from '@/lib/email/send-protocol-email';
 export const dynamic = 'force-dynamic';
 
 /**
+ * Helper function to check if an intervention conflicts with dietary restrictions
+ */
+function conflictsWithDiet(interventionName: string, description: string, restrictions: string[]): boolean {
+  if (!restrictions || restrictions.length === 0) return false;
+
+  const text = `${interventionName} ${description}`.toLowerCase();
+
+  // Define conflict rules
+  const conflictMap: Record<string, string[]> = {
+    'vegetarian': ['beef', 'pork', 'chicken', 'turkey', 'fish', 'seafood', 'meat'],
+    'vegan': ['beef', 'pork', 'chicken', 'turkey', 'fish', 'seafood', 'meat', 'dairy', 'milk', 'cheese', 'whey', 'casein', 'egg', 'honey', 'collagen', 'gelatin'],
+    'pescatarian': ['beef', 'pork', 'chicken', 'turkey', 'meat'],
+    'gluten-free': ['gluten', 'wheat', 'barley', 'rye', 'bread', 'pasta'],
+    'dairy-free': ['dairy', 'milk', 'cheese', 'whey', 'casein', 'yogurt', 'butter', 'cream'],
+    'nut-allergy': ['almond', 'walnut', 'cashew', 'pecan', 'hazelnut', 'macadamia', 'pistachio', 'nut '],
+    'shellfish-allergy': ['shrimp', 'crab', 'lobster', 'shellfish', 'oyster', 'clam', 'mussel'],
+    'soy-free': ['soy', 'tofu', 'tempeh', 'edamame', 'miso'],
+    'egg-free': ['egg']
+  };
+
+  for (const restriction of restrictions) {
+    const keywords = conflictMap[restriction];
+    if (keywords) {
+      for (const keyword of keywords) {
+        if (text.includes(keyword)) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
  * POST /api/protocols/generate
  * Generates a personalized protocol based on lab upload results
  *
@@ -62,7 +97,16 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. Get all suboptimal/concerning biomarker results for this upload
+    // 2. Get user's dietary restrictions
+    const { data: userPrefs } = await supabase
+      .from('user_preferences')
+      .select('dietary_restrictions')
+      .eq('user_id', user.id)
+      .single();
+
+    const dietaryRestrictions = userPrefs?.dietary_restrictions || [];
+
+    // 3. Get all suboptimal/concerning biomarker results for this upload
     const { data: biomarkerResults, error: resultsError } = await supabase
       .from('user_biomarker_results')
       .select(`
@@ -150,11 +194,33 @@ export async function POST(request: Request) {
       );
     }
 
-    // 4. Deduplicate interventions (same intervention may apply to multiple markers)
+    // 4. Filter out interventions that conflict with dietary restrictions
+    const filteredRules = protocolRules.filter(rule => {
+      if (!rule.interventions) return false;
+
+      // Only filter dietary and supplement interventions (not lifestyle/exercise)
+      if (rule.interventions.intervention_type === 'dietary' ||
+          rule.interventions.intervention_type === 'supplement') {
+        const conflicts = conflictsWithDiet(
+          rule.interventions.name,
+          rule.interventions.short_description || '',
+          dietaryRestrictions
+        );
+
+        if (conflicts) {
+          console.log(`Filtering out "${rule.interventions.name}" due to dietary restrictions:`, dietaryRestrictions);
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    // 5. Deduplicate interventions (same intervention may apply to multiple markers)
     const interventionMap = new Map();
     const strengthOrder = { primary: 1, secondary: 2, optional: 3 };
 
-    for (const rule of protocolRules) {
+    for (const rule of filteredRules) {
       const interventionId = rule.intervention_id;
       const existing = interventionMap.get(interventionId);
 
@@ -174,7 +240,7 @@ export async function POST(request: Request) {
 
     const deduplicatedRules = Array.from(interventionMap.values());
 
-    // 5. Prioritize and limit to 8-10 interventions
+    // 6. Prioritize and limit to 8-10 interventions
     const sortedRules = deduplicatedRules.sort((a, b) => {
       // Sort by strength first, then priority_order
       if (strengthOrder[a.recommendation_strength] !== strengthOrder[b.recommendation_strength]) {
@@ -185,7 +251,7 @@ export async function POST(request: Request) {
 
     const finalRules = sortedRules.slice(0, 10); // Limit to top 10
 
-    // 6. Calculate protocol metadata
+    // 7. Calculate protocol metadata
     const primaryCount = finalRules.filter(r => r.recommendation_strength === 'primary').length;
     const concerningCount = biomarkerResults.filter(r => r.biomarker_conditions?.severity === 'concerning').length;
 
@@ -205,7 +271,7 @@ export async function POST(request: Request) {
     const retestDate = new Date();
     retestDate.setDate(retestDate.getDate() + 90);
 
-    // 7. Create generated_protocol record
+    // 8. Create generated_protocol record
     const { data: protocol, error: protocolError } = await supabase
       .from('generated_protocols')
       .insert({
@@ -231,7 +297,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // 8. Create protocol_recommendations for each intervention
+    // 9. Create protocol_recommendations for each intervention
     const recommendations = finalRules.map((rule, index) => ({
       protocol_id: protocol.id,
       protocol_rule_id: rule.id,

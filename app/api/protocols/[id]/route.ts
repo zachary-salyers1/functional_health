@@ -54,7 +54,7 @@ export async function GET(
       );
     }
 
-    // 2. Get all protocol recommendations with full intervention details
+    // 2. Get all protocol recommendations with full intervention details and research studies
     const { data: recommendations, error: recommendationsError } = await supabase
       .from('protocol_recommendations')
       .select(`
@@ -100,6 +100,54 @@ export async function GET(
       );
     }
 
+    // 2b. Fetch research studies for each recommendation
+    const recommendationIds = recommendations?.map(r => r.id) || [];
+    let studiesByRecommendation: Record<string, any[]> = {};
+
+    if (recommendationIds.length > 0) {
+      const { data: recStudies, error: studiesError } = await supabase
+        .from('protocol_recommendation_studies')
+        .select(`
+          recommendation_id,
+          research_study_id,
+          display_order,
+          research_studies (
+            id,
+            title,
+            authors,
+            journal,
+            publication_year,
+            pubmed_id,
+            doi,
+            url,
+            study_type,
+            quality_score,
+            sample_size,
+            duration_weeks,
+            key_findings,
+            statistical_significance
+          )
+        `)
+        .in('recommendation_id', recommendationIds)
+        .order('display_order', { ascending: true });
+
+      if (!studiesError && recStudies) {
+        // Group studies by recommendation_id
+        recStudies.forEach((rs: any) => {
+          if (!studiesByRecommendation[rs.recommendation_id]) {
+            studiesByRecommendation[rs.recommendation_id] = [];
+          }
+          studiesByRecommendation[rs.recommendation_id].push(rs.research_studies);
+        });
+      }
+    }
+
+    // Add research studies to each recommendation
+    const recommendationsWithStudies = recommendations?.map(rec => ({
+      ...rec,
+      research_studies: studiesByRecommendation[rec.id] || []
+    }));
+
     // 3. Update last_viewed_at timestamp
     await supabase
       .from('generated_protocols')
@@ -108,18 +156,18 @@ export async function GET(
 
     // 4. Group recommendations by type for better UX
     const groupedRecommendations = {
-      dietary: recommendations.filter(r => r.interventions?.intervention_type === 'dietary'),
-      supplement: recommendations.filter(r => r.interventions?.intervention_type === 'supplement'),
-      lifestyle: recommendations.filter(r => r.interventions?.intervention_type === 'lifestyle'),
-      exercise: recommendations.filter(r => r.interventions?.intervention_type === 'exercise'),
-      sleep: recommendations.filter(r => r.interventions?.intervention_type === 'sleep')
+      dietary: recommendationsWithStudies.filter(r => r.interventions?.intervention_type === 'dietary'),
+      supplement: recommendationsWithStudies.filter(r => r.interventions?.intervention_type === 'supplement'),
+      lifestyle: recommendationsWithStudies.filter(r => r.interventions?.intervention_type === 'lifestyle'),
+      exercise: recommendationsWithStudies.filter(r => r.interventions?.intervention_type === 'exercise'),
+      sleep: recommendationsWithStudies.filter(r => r.interventions?.intervention_type === 'sleep')
     };
 
     // 5. Return comprehensive protocol data
     return NextResponse.json({
       protocol: {
         ...protocol,
-        total_recommendations: recommendations.length,
+        total_recommendations: recommendationsWithStudies.length,
         recommendations_by_type: {
           dietary: groupedRecommendations.dietary.length,
           supplement: groupedRecommendations.supplement.length,
@@ -128,7 +176,7 @@ export async function GET(
           sleep: groupedRecommendations.sleep.length
         }
       },
-      recommendations,
+      recommendations: recommendationsWithStudies,
       grouped_recommendations: groupedRecommendations
     });
 
